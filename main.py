@@ -1,4 +1,5 @@
 import requests
+import time
 from bs4 import BeautifulSoup
 import os
 from dotenv import load_dotenv
@@ -11,20 +12,20 @@ languages = {
     "2": "English"
 }
 
+translations = {
+    "1": {"communicate": "Wpisz adres URL strony, z której chcesz uzyskać informacje: ", "status_code_positive": "Połączono ze stroną internetową.", "status_code_negative": "Nie udało się połączyć ze stroną.", "status_code_blocked": "Połączenie ze storną zablokowane.", "command": "Przeczytaj poniższy tekst i wypisz 3 najważniejsze wnioski po polsku:", "failure": "Nie udało się wygenerować odpowiedzi.", "exception": "Serwer przeciążony. Próba {current} z {max}. Czekam 10 sekund..."},
+    "2": {"communicate": "Enter the URL of the site you want to get information from: ", "status_code_positive": "Connected with the site.", "status_code_negative": "No connection with the site.", "status_code_blocked": "Connection with the site blocked.", "command": "Read text beneath and write down 3 most important conclusions in english:", "failure": "Couldn't generate the response.", "exception": "Server overloaded. Try {current} out of {max}. Waiting 10 seconds..."}
+}
+
 print("Wybierz język/Choose language:")
 for language in languages:
     print(f"{language}: {languages[language]}")
 
 language = input("\nWprowadź numer języka/Enter the language number: ")
 
-chosen_language = languages.get(language, "1")
+chosen_language = translations.get(language, translations["1"])
 
-communicates = {
-    "1": "Wpisz adres URL strony Wikipedii, z której chcesz uzyskać informacje: ",
-    "2": "Enter the URL of the Wikipedia page you want to get information from: "
-}
-
-adress_url = str(input(communicates.get(language, "1")))
+adress_url = str(input(chosen_language["communicate"]))
 
 headers = {
     'User-Agent': 'ProjektEdukacyjnyDoCV/1.0 (mateuszsroda049@gmail.com)'
@@ -32,7 +33,12 @@ headers = {
 
 response = requests.get(adress_url, headers=headers)
 
-print(response.status_code)
+if response.status_code == 200:
+    print(chosen_language["status_code_positive"])
+elif response.status_code == 403:
+    print(chosen_language["status_code_blocked"])
+else:
+    print(chosen_language["status_code_negative"])
 
 soup = BeautifulSoup(response.text, 'html.parser')
 
@@ -46,11 +52,20 @@ for paragraph in paragraphs:
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-command = f"Przeczytaj poniższy tekst i wypisz 3 najważniejsze wnioski w następującym języku: {chosen_language}.\n\n{clean_paragraphs}"
+command = f"{chosen_language["command"]}\n\n{clean_paragraphs}"
 
-ai_response = client.models.generate_content(
-    model='models/gemini-2.5-flash',
-    contents=command
-)
-
-print("\n" + ai_response.text)
+max_tries = 3
+for i in range(max_tries):
+    try: 
+        ai_response = client.models.generate_content(
+            model='models/gemini-2.5-flash',
+            contents=command
+        )
+        print("\n" + ai_response.text)
+        break
+    except Exception as e:
+        exception = chosen_language["exception"].format(current=i+1, max=max_tries)
+        print(exception)
+        time.sleep(10)
+else:
+    print(chosen_language["failure"])
